@@ -1,0 +1,236 @@
+// ============================================================
+// MITRE ATT&CK Cloud Detection Rules — KQL (Azure Sentinel)
+// Author: Odis Huff III | github.com/KingHuff2083
+// Framework: MITRE ATT&CK for Cloud v14
+// ============================================================
+
+// ─────────────────────────────────────────────────────────────
+// T1078.004 — Valid Accounts: Cloud Accounts
+// Console login from country not seen in last 30 days
+// ─────────────────────────────────────────────────────────────
+let lookback = 30d;
+let recentWindow = 1h;
+let knownCountries = SigninLogs
+    | where TimeGenerated > ago(lookback)
+    | where ResultType == "0"
+    | summarize KnownCountries = make_set(Location) by UserPrincipalName;
+SigninLogs
+| where TimeGenerated > ago(recentWindow)
+| where ResultType == "0"
+| join kind=leftouter knownCountries on UserPrincipalName
+| where isnotempty(KnownCountries)
+| where Location !in (KnownCountries)
+| project TimeGenerated, UserPrincipalName, Location, IPAddress, AppDisplayName
+| extend AlertSeverity = "Medium", TechniqueId = "T1078.004"
+
+// ─────────────────────────────────────────────────────────────
+// T1136.003 — Create Account: Cloud Account
+// New AAD user or service principal created
+// ─────────────────────────────────────────────────────────────
+AuditLogs
+| where TimeGenerated > ago(1h)
+| where OperationName in (
+    "Add user",
+    "Add service principal",
+    "Add application"
+  )
+| where Result == "success"
+| extend
+    TargetUser     = tostring(TargetResources[0].userPrincipalName),
+    InitiatedByUser = tostring(InitiatedBy.user.userPrincipalName),
+    TargetType     = tostring(TargetResources[0].type)
+| project TimeGenerated, OperationName, InitiatedByUser, TargetUser, TargetType
+| extend AlertSeverity = "Medium", TechniqueId = "T1136.003"
+
+// ─────────────────────────────────────────────────────────────
+// T1530 — Data from Cloud Storage Object
+// Mass download from Azure Blob Storage
+// ─────────────────────────────────────────────────────────────
+StorageBlobLogs
+| where TimeGenerated > ago(1h)
+| where OperationName == "GetBlob"
+| where StatusCode == 200
+| summarize
+    DownloadCount    = count(),
+    TotalBytes       = sum(ResponseBodySize),
+    DistinctBlobs    = dcount(ObjectKey)
+    by CallerIpAddress, AccountName, bin(TimeGenerated, 5m)
+| where DownloadCount > 500 or TotalBytes > 1073741824  // >500 requests or >1GB
+| extend AlertSeverity = "High", TechniqueId = "T1530"
+
+// ─────────────────────────────────────────────────────────────
+// T1537 — Transfer Data to Cloud Account
+// Storage replication to external account/subscription
+// ─────────────────────────────────────────────────────────────
+AzureActivity
+| where TimeGenerated > ago(1h)
+| where OperationNameValue has_any (
+    "MICROSOFT.STORAGE/STORAGEACCOUNTS/OBJECTREPLICATIONPOLICIES/WRITE",
+    "MICROSOFT.STORAGE/STORAGEACCOUNTS/WRITE"
+  )
+| where ActivityStatusValue == "Success"
+| extend Properties = parse_json(Properties)
+| where isnotempty(tostring(Properties.destinationAccount))
+| project TimeGenerated, Caller, OperationNameValue, ResourceGroup,
+          DestAccount = tostring(Properties.destinationAccount)
+| extend AlertSeverity = "High", TechniqueId = "T1537"
+
+// ─────────────────────────────────────────────────────────────
+// T1562.008 — Impair Defenses: Disable Cloud Logs
+// Diagnostic settings deleted or Log Analytics workspace modified
+// ─────────────────────────────────────────────────────────────
+AzureActivity
+| where TimeGenerated > ago(1h)
+| where OperationNameValue has_any (
+    "MICROSOFT.INSIGHTS/DIAGNOSTICSETTINGS/DELETE",
+    "MICROSOFT.OPERATIONALINSIGHTS/WORKSPACES/DELETE",
+    "MICROSOFT.SECURITY/SETTINGS/WRITE"
+  )
+| where ActivityStatusValue == "Success"
+| project TimeGenerated, Caller, OperationNameValue, ResourceGroup, SubscriptionId
+| extend AlertSeverity = "Critical", TechniqueId = "T1562.008"
+
+// ─────────────────────────────────────────────────────────────
+// T1098.001 — Account Manipulation: Additional Cloud Credentials
+// New credentials or admin role assignment
+// ─────────────────────────────────────────────────────────────
+AuditLogs
+| where TimeGenerated > ago(1h)
+| where OperationName in (
+    "Add member to role",
+    "Add app role assignment to service principal",
+    "Update application — Certificates and secrets management"
+  )
+| extend
+    RoleName    = tostring(TargetResources[0].modifiedProperties[0].newValue),
+    TargetUser  = tostring(TargetResources[0].userPrincipalName),
+    Initiator   = tostring(InitiatedBy.user.userPrincipalName)
+| where RoleName has_any ("Global Administrator", "Owner", "Contributor", "User Access Administrator")
+| project TimeGenerated, OperationName, Initiator, TargetUser, RoleName
+| extend AlertSeverity = "High", TechniqueId = "T1098.001"
+
+// ─────────────────────────────────────────────────────────────
+// T1580 — Cloud Infrastructure Discovery
+// Rapid multi-service read-only API enumeration
+// ─────────────────────────────────────────────────────────────
+AzureActivity
+| where TimeGenerated > ago(10m)
+| where OperationNameValue has_any ("READ", "LIST", "GET")
+| where ActivityStatusValue == "Success"
+| summarize
+    ApiCallCount   = count(),
+    DistinctOps    = dcount(OperationNameValue),
+    DistinctResGrp = dcount(ResourceGroup)
+    by Caller, bin(TimeGenerated, 10m)
+| where ApiCallCount > 100 and DistinctOps > 15
+| extend AlertSeverity = "Medium", TechniqueId = "T1580"
+
+// ─────────────────────────────────────────────────────────────
+// T1619 — Cloud Storage Object Discovery
+// Storage account and container enumeration
+// ─────────────────────────────────────────────────────────────
+StorageBlobLogs
+| where TimeGenerated > ago(5m)
+| where OperationName in (
+    "ListContainers",
+    "ListBlobs",
+    "GetContainerProperties",
+    "GetContainerAcl"
+  )
+| summarize
+    EnumCount = count(),
+    Containers = make_set(ContainerName)
+    by CallerIpAddress, AccountName, bin(TimeGenerated, 5m)
+| where EnumCount > 20
+| extend AlertSeverity = "Medium", TechniqueId = "T1619"
+
+// ─────────────────────────────────────────────────────────────
+// T1552.005 — Unsecured Credentials: Cloud Instance Metadata API
+// Direct metadata service access from unusual process or user
+// ─────────────────────────────────────────────────────────────
+AzureActivity
+| where TimeGenerated > ago(1h)
+| where OperationNameValue has_any (
+    "MICROSOFT.KEYVAULT/VAULTS/SECRETS/READ",
+    "MICROSOFT.KEYVAULT/VAULTS/KEYS/READ"
+  )
+| where ActivityStatusValue == "Success"
+| summarize
+    SecretAccessCount = count(),
+    DistinctSecrets   = dcount(Resource)
+    by Caller, bin(TimeGenerated, 5m)
+| where SecretAccessCount > 20
+| extend AlertSeverity = "Medium", TechniqueId = "T1552.005"
+
+// ─────────────────────────────────────────────────────────────
+// T1525 — Implant Internal Image
+// New container image pushed to Azure Container Registry
+// ─────────────────────────────────────────────────────────────
+ContainerRegistryRepositoryEvents
+| where TimeGenerated > ago(1h)
+| where OperationName == "Push"
+| where LoginServer !endswith ".azurecr.io"  // external push source
+    or Tag has_any ("latest", "main", "prod")
+| project TimeGenerated, OperationName, Repository, Tag, LoginServer, IPAddress
+| extend AlertSeverity = "Medium", TechniqueId = "T1525"
+
+// ─────────────────────────────────────────────────────────────
+// T1610 — Deploy Container
+// New AKS workload or container group deployed outside CI/CD
+// ─────────────────────────────────────────────────────────────
+AzureActivity
+| where TimeGenerated > ago(1h)
+| where OperationNameValue has_any (
+    "MICROSOFT.CONTAINERSERVICE/MANAGEDCLUSTERS/WRITE",
+    "MICROSOFT.CONTAINERINSTANCE/CONTAINERGROUPS/WRITE"
+  )
+| where ActivityStatusValue == "Success"
+| where Caller !endswith "pipeline@yourorg.com"
+| project TimeGenerated, Caller, OperationNameValue, ResourceGroup,
+          Resource, SubscriptionId
+| extend AlertSeverity = "Medium", TechniqueId = "T1610"
+
+// ─────────────────────────────────────────────────────────────
+// T1611 — Escape to Host
+// Privileged container or host-network pod in AKS
+// ─────────────────────────────────────────────────────────────
+KubePodInventory
+| where TimeGenerated > ago(1h)
+| where ContainerStatus == "running"
+| join kind=inner (
+    ContainerInventory
+    | where EnvironmentVar has "privileged=true"
+       or  EnvironmentVar has "hostNetwork=true"
+  ) on ContainerID
+| project TimeGenerated, Name, Namespace, ContainerID, Image, Node
+| extend AlertSeverity = "High", TechniqueId = "T1611"
+
+// ─────────────────────────────────────────────────────────────
+// T1535 — Unused or Unsupported Cloud Regions
+// Resource creation in non-approved Azure region
+// ─────────────────────────────────────────────────────────────
+let approvedRegions = dynamic(["eastus", "westus2", "westeurope", "northeurope"]);
+AzureActivity
+| where TimeGenerated > ago(1h)
+| where ActivityStatusValue == "Success"
+| where OperationNameValue has "WRITE"
+| extend Region = tolower(tostring(parse_json(Properties).location))
+| where isnotempty(Region)
+| where Region !in (approvedRegions)
+| project TimeGenerated, Caller, OperationNameValue, Region, ResourceGroup
+| extend AlertSeverity = "High", TechniqueId = "T1535"
+
+// ─────────────────────────────────────────────────────────────
+// T1048 — Exfiltration Over Alternative Protocol
+// Anomalous outbound DNS query volume from Azure VM
+// ─────────────────────────────────────────────────────────────
+AzureNetworkAnalytics_CL
+| where TimeGenerated > ago(5m)
+| where DestPort_d == 53
+| where FlowStatus_s == "A"
+| summarize
+    DnsQueryCount = count(),
+    TotalBytes    = sum(InboundBytes_d + OutboundBytes_d)
+    by SrcIP_s, bin(TimeGenerated, 5m)
+| where DnsQueryCount > 1000 or TotalBytes > 104857600  // >1000 queries or >100MB
+| extend AlertSeverity = "Medium", TechniqueId = "T1048"

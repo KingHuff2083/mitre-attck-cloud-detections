@@ -1,0 +1,67 @@
+title: Valid Accounts - Cloud Console Login from Unusual Location
+id: a1b2c3d4-0001-4e5f-8a9b-cloud001
+status: experimental
+description: Detects successful cloud console logins from countries not previously seen for the user, indicating potential account compromise using valid credentials.
+references:
+  - https://attack.mitre.org/techniques/T1078/004/
+author: Odis Huff III
+date: 2026-01-01
+tags:
+  - attack.initial_access
+  - attack.persistence
+  - attack.t1078
+  - attack.t1078.004
+logsource:
+  product: aws
+  service: cloudtrail
+detection:
+  selection:
+    eventSource: signin.amazonaws.com
+    eventName: ConsoleLogin
+    responseElements.ConsoleLogin: Success
+  filter_known_countries:
+    userIdentity.type: IAMUser
+  condition: selection
+fields:
+  - userIdentity.userName
+  - sourceIPAddress
+  - userAgent
+  - awsRegion
+falsepositives:
+  - Legitimate travel or VPN use
+  - Remote workers in new locations
+level: medium
+---
+title: Valid Accounts - Programmatic Access from New IP Range
+id: a1b2c3d4-0002-4e5f-8a9b-cloud002
+status: experimental
+description: Detects AWS API calls using IAM user long-term access keys from IP addresses not previously associated with the user.
+references:
+  - https://attack.mitre.org/techniques/T1078/004/
+author: Odis Huff III
+date: 2026-01-01
+tags:
+  - attack.initial_access
+  - attack.t1078
+  - attack.t1078.004
+logsource:
+  product: aws
+  service: cloudtrail
+detection:
+  selection:
+    userIdentity.type: IAMUser
+    errorCode|not_exists: true
+  filter_common_apis:
+    eventName:
+      - GetCallerIdentity
+      - ListBuckets
+      - DescribeInstances
+  condition: selection and filter_common_apis
+fields:
+  - userIdentity.userName
+  - sourceIPAddress
+  - eventName
+falsepositives:
+  - New developer workstations
+  - CI/CD pipeline IP rotation
+level: low

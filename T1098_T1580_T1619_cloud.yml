@@ -1,0 +1,103 @@
+title: Account Manipulation - IAM Policy Privilege Escalation
+id: d4e5f6a7-0007-4e5f-8a9b-cloud007
+status: experimental
+description: Detects modification of IAM policies or role trust relationships that could grant elevated permissions. Adversaries attach broad permissions to compromise accounts.
+references:
+  - https://attack.mitre.org/techniques/T1098/001/
+author: Odis Huff III
+date: 2026-01-01
+tags:
+  - attack.persistence
+  - attack.privilege_escalation
+  - attack.t1098
+  - attack.t1098.001
+logsource:
+  product: aws
+  service: cloudtrail
+detection:
+  selection_policy:
+    eventSource: iam.amazonaws.com
+    eventName:
+      - PutUserPolicy
+      - AttachUserPolicy
+      - AttachRolePolicy
+      - PutRolePolicy
+  selection_admin:
+    requestParameters.policyArn: 'arn:aws:iam::aws:policy/AdministratorAccess'
+  condition: selection_policy or selection_admin
+fields:
+  - userIdentity.arn
+  - requestParameters.userName
+  - requestParameters.policyArn
+  - requestParameters.roleName
+falsepositives:
+  - Authorized IAM administration
+  - IaC deployments via CI/CD
+level: high
+---
+title: Cloud Infrastructure Discovery - Broad API Enumeration
+id: d4e5f6a7-0008-4e5f-8a9b-cloud008
+status: experimental
+description: Detects rapid enumeration of cloud resources across multiple services, indicative of an adversary mapping the environment after initial access.
+references:
+  - https://attack.mitre.org/techniques/T1580/
+author: Odis Huff III
+date: 2026-01-01
+tags:
+  - attack.discovery
+  - attack.t1580
+logsource:
+  product: aws
+  service: cloudtrail
+detection:
+  selection:
+    eventName|startswith:
+      - Describe
+      - List
+      - Get
+    errorCode|not_exists: true
+  timeframe: 10m
+  condition: selection | count() by userIdentity.arn > 100
+fields:
+  - userIdentity.arn
+  - sourceIPAddress
+  - eventSource
+falsepositives:
+  - Security scanning tools
+  - Cloud asset inventory solutions
+level: medium
+---
+title: Cloud Storage Object Discovery - S3 Bucket Enumeration
+id: d4e5f6a7-0009-4e5f-8a9b-cloud009
+status: experimental
+description: Detects enumeration of S3 bucket contents and metadata, commonly performed by adversaries to identify valuable data targets.
+references:
+  - https://attack.mitre.org/techniques/T1619/
+author: Odis Huff III
+date: 2026-01-01
+tags:
+  - attack.discovery
+  - attack.t1619
+logsource:
+  product: aws
+  service: cloudtrail
+detection:
+  selection:
+    eventSource: s3.amazonaws.com
+    eventName:
+      - ListBuckets
+      - ListObjects
+      - ListObjectsV2
+      - GetBucketAcl
+      - GetBucketPolicy
+      - GetBucketLogging
+  timeframe: 5m
+  condition: selection | count() by userIdentity.arn > 20
+fields:
+  - userIdentity.arn
+  - requestParameters.bucketName
+  - sourceIPAddress
+falsepositives:
+  - Cloud security posture tools
+  - Legitimate data engineering workflows
+level: medium

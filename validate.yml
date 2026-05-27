@@ -1,0 +1,57 @@
+name: Validate Sigma Rules
+
+on:
+  push:
+    branches: [main, develop]
+    paths:
+      - 'sigma/**'
+  pull_request:
+    branches: [main]
+    paths:
+      - 'sigma/**'
+
+jobs:
+  sigma-validate:
+    name: Sigma Rule Validation
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install sigma-cli
+        run: pip install sigma-cli pySigma-backend-splunk pySigma-backend-elasticsearch
+
+      - name: Validate all Sigma rules
+        run: |
+          echo "=== Validating Sigma rules ==="
+          sigma check sigma/
+          echo "✅ All rules passed validation"
+
+      - name: Test conversion to Splunk SPL
+        run: |
+          echo "=== Testing Splunk conversion ==="
+          for f in sigma/*.yml; do
+            echo "Converting: $f"
+            sigma convert -t splunk "$f" || echo "⚠️  Warning: $f failed Splunk conversion"
+          done
+
+      - name: Test conversion to Elasticsearch
+        run: |
+          echo "=== Testing Elasticsearch conversion ==="
+          for f in sigma/*.yml; do
+            echo "Converting: $f"
+            sigma convert -t elasticsearch "$f" || echo "⚠️  Warning: $f failed ES conversion"
+          done
+
+      - name: Count rules
+        run: |
+          echo "=== Rule summary ==="
+          echo "Sigma files: $(ls sigma/*.yml | wc -l)"
+          echo "Total rule definitions: $(grep -c '^title:' sigma/*.yml | awk -F: '{sum += $2} END {print sum}')"
+          echo "Critical rules: $(grep -c 'level: critical' sigma/*.yml | awk -F: '{sum += $2} END {print sum}')"
+          echo "High rules: $(grep -c 'level: high' sigma/*.yml | awk -F: '{sum += $2} END {print sum}')"

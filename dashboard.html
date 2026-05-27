@@ -1,0 +1,945 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>MITRE ATT&CK Cloud Coverage — Odis Huff III</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #0a0c0f;
+    --bg2: #0f1217;
+    --bg3: #151a21;
+    --border: rgba(255,255,255,0.07);
+    --border2: rgba(255,255,255,0.12);
+    --text: #e2e8f0;
+    --muted: #64748b;
+    --faint: #334155;
+    --mono: 'IBM Plex Mono', monospace;
+    --sans: 'DM Sans', sans-serif;
+    --red: #ef4444;
+    --orange: #f97316;
+    --yellow: #eab308;
+    --green: #22c55e;
+    --blue: #3b82f6;
+    --purple: #a78bfa;
+    --cyan: #06b6d4;
+    --accent: #06b6d4;
+
+    /* tactic colors */
+    --c-initial:   #f97316;
+    --c-exec:      #ef4444;
+    --c-persist:   #a78bfa;
+    --c-privesc:   #ec4899;
+    --c-defense:   #eab308;
+    --c-cred:      #f97316;
+    --c-discovery: #3b82f6;
+    --c-lateral:   #06b6d4;
+    --c-collection:#22c55e;
+    --c-exfil:     #f43f5e;
+  }
+
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--sans);
+    font-size: 14px;
+    line-height: 1.6;
+    min-height: 100vh;
+  }
+
+  /* ── GRID TEXTURE ── */
+  body::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    background-image:
+      linear-gradient(rgba(6,182,212,0.03) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(6,182,212,0.03) 1px, transparent 1px);
+    background-size: 40px 40px;
+    pointer-events: none;
+    z-index: 0;
+  }
+
+  .wrap { position: relative; z-index: 1; max-width: 1200px; margin: 0 auto; padding: 0 24px; }
+
+  /* ── HEADER ── */
+  header {
+    border-bottom: 1px solid var(--border);
+    padding: 32px 0 28px;
+  }
+
+  .header-top {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 24px;
+    flex-wrap: wrap;
+  }
+
+  .eyebrow {
+    font-family: var(--mono);
+    font-size: 11px;
+    letter-spacing: 0.15em;
+    color: var(--accent);
+    text-transform: uppercase;
+    margin-bottom: 8px;
+  }
+
+  h1 {
+    font-family: var(--mono);
+    font-size: clamp(20px, 3vw, 28px);
+    font-weight: 600;
+    color: #fff;
+    letter-spacing: -0.02em;
+    line-height: 1.2;
+  }
+
+  h1 span { color: var(--accent); }
+
+  .header-meta {
+    font-size: 13px;
+    color: var(--muted);
+    margin-top: 6px;
+  }
+
+  .header-meta a { color: var(--accent); text-decoration: none; }
+  .header-meta a:hover { text-decoration: underline; }
+
+  .header-badges { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 16px; }
+
+  .badge {
+    font-family: var(--mono);
+    font-size: 11px;
+    padding: 4px 10px;
+    border-radius: 4px;
+    border: 1px solid var(--border2);
+    color: var(--muted);
+    background: var(--bg2);
+    letter-spacing: 0.04em;
+  }
+
+  .badge.live { border-color: rgba(34,197,94,0.4); color: #86efac; background: rgba(34,197,94,0.06); }
+
+  /* ── STATS ROW ── */
+  .stats-row {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+    gap: 1px;
+    background: var(--border);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    overflow: hidden;
+    margin: 28px 0;
+  }
+
+  .stat {
+    background: var(--bg2);
+    padding: 20px 24px;
+    text-align: center;
+  }
+
+  .stat-num {
+    font-family: var(--mono);
+    font-size: 32px;
+    font-weight: 600;
+    color: #fff;
+    line-height: 1;
+  }
+
+  .stat-num.cyan  { color: var(--cyan); }
+  .stat-num.green { color: var(--green); }
+  .stat-num.amber { color: var(--yellow); }
+  .stat-num.red   { color: var(--red); }
+
+  .stat-label {
+    font-size: 11px;
+    color: var(--muted);
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    margin-top: 4px;
+  }
+
+  /* ── FILTERS ── */
+  .filters {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+    margin-bottom: 20px;
+  }
+
+  .filter-btn {
+    font-family: var(--mono);
+    font-size: 11px;
+    padding: 6px 12px;
+    border-radius: 4px;
+    border: 1px solid var(--border2);
+    background: var(--bg2);
+    color: var(--muted);
+    cursor: pointer;
+    letter-spacing: 0.04em;
+    transition: all 0.15s;
+  }
+
+  .filter-btn:hover { border-color: var(--accent); color: var(--accent); }
+  .filter-btn.active { border-color: var(--accent); color: var(--accent); background: rgba(6,182,212,0.08); }
+
+  /* ── SEARCH ── */
+  .search-row {
+    display: flex;
+    gap: 10px;
+    margin-bottom: 20px;
+    align-items: center;
+  }
+
+  .search-input {
+    flex: 1;
+    background: var(--bg2);
+    border: 1px solid var(--border2);
+    border-radius: 6px;
+    color: var(--text);
+    font-family: var(--mono);
+    font-size: 13px;
+    padding: 9px 14px;
+    outline: none;
+    transition: border-color 0.15s;
+  }
+
+  .search-input:focus { border-color: var(--accent); }
+  .search-input::placeholder { color: var(--muted); }
+
+  .results-count {
+    font-family: var(--mono);
+    font-size: 12px;
+    color: var(--muted);
+    white-space: nowrap;
+  }
+
+  /* ── TABLE ── */
+  .table-wrap {
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    overflow: hidden;
+    margin-bottom: 32px;
+  }
+
+  table { width: 100%; border-collapse: collapse; }
+
+  thead tr {
+    background: var(--bg3);
+    border-bottom: 1px solid var(--border);
+  }
+
+  th {
+    font-family: var(--mono);
+    font-size: 10px;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--muted);
+    padding: 12px 16px;
+    text-align: left;
+    white-space: nowrap;
+    cursor: pointer;
+    user-select: none;
+    transition: color 0.15s;
+  }
+
+  th:hover { color: var(--accent); }
+  th .sort-arrow { opacity: 0.3; margin-left: 4px; }
+  th.sorted .sort-arrow { opacity: 1; color: var(--accent); }
+
+  tbody tr {
+    border-bottom: 1px solid var(--border);
+    transition: background 0.1s;
+    cursor: pointer;
+  }
+
+  tbody tr:last-child { border-bottom: none; }
+  tbody tr:hover { background: rgba(6,182,212,0.04); }
+  tbody tr.expanded { background: rgba(6,182,212,0.06); }
+
+  td {
+    padding: 13px 16px;
+    vertical-align: middle;
+  }
+
+  .technique-id {
+    font-family: var(--mono);
+    font-size: 12px;
+    color: var(--accent);
+    white-space: nowrap;
+  }
+
+  .technique-name { font-size: 13px; font-weight: 500; color: var(--text); }
+  .technique-sub  { font-size: 11px; color: var(--muted); margin-top: 2px; }
+
+  .tactic-tag {
+    font-family: var(--mono);
+    font-size: 10px;
+    padding: 3px 8px;
+    border-radius: 3px;
+    letter-spacing: 0.04em;
+    white-space: nowrap;
+    display: inline-block;
+  }
+
+  .sev-badge {
+    font-family: var(--mono);
+    font-size: 10px;
+    padding: 3px 8px;
+    border-radius: 3px;
+    letter-spacing: 0.06em;
+    font-weight: 600;
+    text-transform: uppercase;
+    white-space: nowrap;
+    display: inline-block;
+  }
+
+  .sev-critical { background: rgba(239,68,68,0.15); color: #fca5a5; border: 1px solid rgba(239,68,68,0.3); }
+  .sev-high     { background: rgba(249,115,22,0.15); color: #fdba74; border: 1px solid rgba(249,115,22,0.3); }
+  .sev-medium   { background: rgba(234,179,8,0.15);  color: #fde047; border: 1px solid rgba(234,179,8,0.3); }
+  .sev-low      { background: rgba(34,197,94,0.15);  color: #86efac; border: 1px solid rgba(34,197,94,0.3); }
+
+  .coverage-dot {
+    width: 8px; height: 8px;
+    border-radius: 50%;
+    display: inline-block;
+    margin-right: 6px;
+    vertical-align: middle;
+  }
+  .cov-sigma { background: #a78bfa; }
+  .cov-kql   { background: #06b6d4; }
+
+  .coverage-chips { display: flex; gap: 6px; }
+
+  .chip {
+    font-family: var(--mono);
+    font-size: 10px;
+    padding: 2px 8px;
+    border-radius: 3px;
+    border: 1px solid var(--border2);
+    color: var(--muted);
+  }
+
+  .chip.has-sigma { border-color: rgba(167,139,250,0.4); color: #c4b5fd; background: rgba(167,139,250,0.07); }
+  .chip.has-kql   { border-color: rgba(6,182,212,0.4);   color: #67e8f9; background: rgba(6,182,212,0.07); }
+
+  .expand-icon { color: var(--muted); font-size: 12px; transition: transform 0.2s; }
+  tr.expanded .expand-icon { transform: rotate(90deg); color: var(--accent); }
+
+  /* ── EXPANDED ROW ── */
+  .detail-row td {
+    padding: 0;
+    background: var(--bg3);
+    border-bottom: 1px solid var(--border);
+  }
+
+  .detail-inner {
+    padding: 20px 24px;
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 20px;
+  }
+
+  @media (max-width: 700px) { .detail-inner { grid-template-columns: 1fr; } }
+
+  .detail-section h4 {
+    font-family: var(--mono);
+    font-size: 10px;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--muted);
+    margin-bottom: 8px;
+  }
+
+  .detail-section p {
+    font-size: 13px;
+    color: #94a3b8;
+    line-height: 1.6;
+  }
+
+  .fps { margin-top: 8px; }
+  .fp-item {
+    font-size: 12px;
+    color: var(--muted);
+    padding: 3px 0;
+    border-left: 2px solid var(--border2);
+    padding-left: 8px;
+    margin-bottom: 4px;
+  }
+
+  .log-sources { display: flex; gap: 6px; flex-wrap: wrap; }
+  .log-tag {
+    font-family: var(--mono);
+    font-size: 10px;
+    padding: 2px 8px;
+    background: var(--bg2);
+    border: 1px solid var(--border2);
+    border-radius: 3px;
+    color: var(--muted);
+  }
+
+  .detail-links { display: flex; gap: 10px; margin-top: 12px; }
+  .detail-link {
+    font-family: var(--mono);
+    font-size: 11px;
+    color: var(--accent);
+    text-decoration: none;
+    border: 1px solid rgba(6,182,212,0.3);
+    padding: 4px 10px;
+    border-radius: 4px;
+    transition: background 0.15s;
+  }
+  .detail-link:hover { background: rgba(6,182,212,0.1); }
+
+  /* ── COVERAGE HEATMAP ── */
+  .section-heading {
+    font-family: var(--mono);
+    font-size: 11px;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--muted);
+    margin-bottom: 16px;
+    padding-bottom: 10px;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .heatmap {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+    gap: 8px;
+    margin-bottom: 36px;
+  }
+
+  .hm-cell {
+    background: var(--bg2);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 14px 16px;
+    transition: border-color 0.15s, transform 0.15s;
+    cursor: pointer;
+  }
+
+  .hm-cell:hover { border-color: var(--border2); transform: translateY(-1px); }
+
+  .hm-tactic {
+    font-family: var(--mono);
+    font-size: 10px;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    margin-bottom: 6px;
+  }
+
+  .hm-count {
+    font-family: var(--mono);
+    font-size: 24px;
+    font-weight: 600;
+    color: #fff;
+    line-height: 1;
+  }
+
+  .hm-label { font-size: 11px; color: var(--muted); margin-top: 2px; }
+
+  .hm-bar {
+    height: 3px;
+    background: var(--border);
+    border-radius: 2px;
+    margin-top: 10px;
+    overflow: hidden;
+  }
+
+  .hm-fill {
+    height: 100%;
+    border-radius: 2px;
+    transition: width 0.6s ease;
+  }
+
+  /* ── FOOTER ── */
+  footer {
+    border-top: 1px solid var(--border);
+    padding: 24px 0;
+    text-align: center;
+  }
+
+  footer p { font-family: var(--mono); font-size: 11px; color: var(--muted); }
+  footer a { color: var(--accent); text-decoration: none; }
+
+  /* ── HIDDEN ── */
+  .hidden { display: none !important; }
+
+  /* ── ANIMATE IN ── */
+  @keyframes fadeUp {
+    from { opacity: 0; transform: translateY(8px); }
+    to   { opacity: 1; transform: translateY(0); }
+  }
+
+  tbody tr { animation: fadeUp 0.2s ease both; }
+</style>
+</head>
+<body>
+
+<div class="wrap">
+
+  <!-- HEADER -->
+  <header>
+    <div class="header-top">
+      <div>
+        <div class="eyebrow">Detection Engineering Portfolio</div>
+        <h1>MITRE ATT&CK <span>Cloud</span> Coverage Map</h1>
+        <p class="header-meta">
+          15 cloud-relevant techniques mapped to Sigma + KQL detection rules.<br>
+          Author: <a href="https://github.com/KingHuff2083" target="_blank">Odis Huff III</a> &nbsp;·&nbsp;
+          <a href="https://attack.mitre.org" target="_blank">ATT&CK v14</a> &nbsp;·&nbsp;
+          AWS · Azure · GCP
+        </p>
+        <div class="header-badges">
+          <span class="badge live">● 15 techniques</span>
+          <span class="badge">15 Sigma rules</span>
+          <span class="badge">15 KQL queries</span>
+          <span class="badge">8 tactics</span>
+          <span class="badge">NIST 800-53 aligned</span>
+        </div>
+      </div>
+    </div>
+  </header>
+
+  <!-- STATS -->
+  <div class="stats-row">
+    <div class="stat">
+      <div class="stat-num cyan" id="stat-total">15</div>
+      <div class="stat-label">Techniques</div>
+    </div>
+    <div class="stat">
+      <div class="stat-num green" id="stat-critical">1</div>
+      <div class="stat-label">Critical</div>
+    </div>
+    <div class="stat">
+      <div class="stat-num amber" id="stat-high">6</div>
+      <div class="stat-label">High</div>
+    </div>
+    <div class="stat">
+      <div class="stat-num" id="stat-medium">8</div>
+      <div class="stat-label">Medium</div>
+    </div>
+    <div class="stat">
+      <div class="stat-num" style="color:#a78bfa">100%</div>
+      <div class="stat-label">Sigma coverage</div>
+    </div>
+    <div class="stat">
+      <div class="stat-num" style="color:var(--cyan)">100%</div>
+      <div class="stat-label">KQL coverage</div>
+    </div>
+  </div>
+
+  <!-- HEATMAP -->
+  <div class="section-heading">Coverage by tactic</div>
+  <div class="heatmap" id="heatmap"></div>
+
+  <!-- FILTERS + SEARCH -->
+  <div class="search-row">
+    <input class="search-input" type="text" id="search" placeholder="Search technique, ID, tactic...">
+    <span class="results-count" id="results-count">15 results</span>
+  </div>
+
+  <div class="filters" id="filters">
+    <button class="filter-btn active" data-filter="all">All tactics</button>
+  </div>
+
+  <!-- TABLE -->
+  <div class="table-wrap">
+    <table id="main-table">
+      <thead>
+        <tr>
+          <th data-col="id">Technique ID <span class="sort-arrow">↕</span></th>
+          <th data-col="name">Name <span class="sort-arrow">↕</span></th>
+          <th data-col="tactic">Tactic <span class="sort-arrow">↕</span></th>
+          <th data-col="severity">Severity <span class="sort-arrow">↕</span></th>
+          <th data-col="logsource">Log source</th>
+          <th>Coverage</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody id="table-body"></tbody>
+    </table>
+  </div>
+
+  <!-- FOOTER -->
+  <footer>
+    <p>
+      Built by <a href="https://github.com/KingHuff2083" target="_blank">Odis Huff III</a> &nbsp;·&nbsp;
+      <a href="https://github.com/KingHuff2083/cloud-security-portfolio" target="_blank">github.com/KingHuff2083/cloud-security-portfolio</a> &nbsp;·&nbsp;
+      MITRE ATT&CK® is a registered trademark of The MITRE Corporation
+    </p>
+  </footer>
+
+</div>
+
+<script>
+const TECHNIQUES = [
+  {
+    id: "T1078.004", name: "Valid Accounts", sub: "Cloud Accounts",
+    tactic: "Initial Access", tacticKey: "initial_access",
+    severity: "medium", logsource: ["CloudTrail", "Azure SignIn"],
+    sigma: "sigma/T1078_valid_accounts_cloud.yml",
+    kql: "kql/all_detections.kql#T1078",
+    description: "Adversaries obtain and abuse valid cloud credentials to gain access. Detected via anomalous login geography and unusual API call patterns from new IP ranges.",
+    fps: ["Legitimate travel or VPN use", "Remote workers in new locations", "CI/CD pipeline IP rotation"],
+    nist: "AC-2, AC-7, AU-12"
+  },
+  {
+    id: "T1136.003", name: "Create Account", sub: "Cloud Account",
+    tactic: "Persistence", tacticKey: "persistence",
+    severity: "medium", logsource: ["CloudTrail", "AuditLogs"],
+    sigma: "sigma/T1136_create_account_cloud.yml",
+    kql: "kql/all_detections.kql#T1136",
+    description: "Adversaries create cloud accounts such as IAM users or service principals to maintain persistent access to cloud environments.",
+    fps: ["Legitimate dev onboarding", "Automated IaC provisioning"],
+    nist: "AC-2, AC-6"
+  },
+  {
+    id: "T1530", name: "Data from Cloud Storage", sub: "Object Store",
+    tactic: "Collection", tacticKey: "collection",
+    severity: "high", logsource: ["CloudTrail", "StorageBlobLogs"],
+    sigma: "sigma/T1530_T1537_T1562_cloud.yml",
+    kql: "kql/all_detections.kql#T1530",
+    description: "Adversaries access data stored in cloud storage services. Detected by monitoring for bulk object downloads exceeding normal thresholds.",
+    fps: ["Batch processing jobs", "Legitimate bulk data migrations"],
+    nist: "SC-28, AU-12, SI-4"
+  },
+  {
+    id: "T1537", name: "Transfer Data to Cloud Account", sub: "Exfil via Replication",
+    tactic: "Exfiltration", tacticKey: "exfiltration",
+    severity: "high", logsource: ["CloudTrail", "AzureActivity"],
+    sigma: "sigma/T1530_T1537_T1562_cloud.yml",
+    kql: "kql/all_detections.kql#T1537",
+    description: "Adversaries exfiltrate data by replicating or transferring cloud storage to adversary-controlled external accounts.",
+    fps: ["Approved cross-account data sharing", "Disaster recovery replication"],
+    nist: "SC-8, AU-12, SI-4"
+  },
+  {
+    id: "T1562.008", name: "Impair Defenses", sub: "Disable Cloud Logs",
+    tactic: "Defense Evasion", tacticKey: "defense_evasion",
+    severity: "critical", logsource: ["CloudTrail", "AzureActivity"],
+    sigma: "sigma/T1530_T1537_T1562_cloud.yml",
+    kql: "kql/all_detections.kql#T1562",
+    description: "Adversaries disable or modify cloud logging services such as CloudTrail or Azure Diagnostic Settings to prevent activity recording.",
+    fps: ["Authorized security team maintenance"],
+    nist: "AU-9, AU-12, SI-4"
+  },
+  {
+    id: "T1098.001", name: "Account Manipulation", sub: "Additional Cloud Credentials",
+    tactic: "Persistence", tacticKey: "persistence",
+    severity: "high", logsource: ["CloudTrail", "AuditLogs"],
+    sigma: "sigma/T1098_T1580_T1619_cloud.yml",
+    kql: "kql/all_detections.kql#T1098",
+    description: "Adversaries modify cloud account permissions or attach admin policies to maintain or escalate access within a cloud environment.",
+    fps: ["Authorized IAM administration", "IaC deployments via CI/CD"],
+    nist: "AC-2, AC-6, AC-17"
+  },
+  {
+    id: "T1580", name: "Cloud Infrastructure Discovery", sub: "Resource Enumeration",
+    tactic: "Discovery", tacticKey: "discovery",
+    severity: "medium", logsource: ["CloudTrail", "AzureActivity"],
+    sigma: "sigma/T1098_T1580_T1619_cloud.yml",
+    kql: "kql/all_detections.kql#T1580",
+    description: "Adversaries enumerate cloud infrastructure resources — VMs, storage, databases — to identify targets and understand the environment.",
+    fps: ["Security scanning tools", "Cloud asset inventory solutions"],
+    nist: "CM-8, AU-12, SI-4"
+  },
+  {
+    id: "T1619", name: "Cloud Storage Object Discovery", sub: "S3 / Blob Enumeration",
+    tactic: "Discovery", tacticKey: "discovery",
+    severity: "medium", logsource: ["CloudTrail", "StorageBlobLogs"],
+    sigma: "sigma/T1098_T1580_T1619_cloud.yml",
+    kql: "kql/all_detections.kql#T1619",
+    description: "Adversaries enumerate objects in cloud storage to identify data of interest for collection or exfiltration.",
+    fps: ["CSPM tools", "Legitimate data engineering workflows"],
+    nist: "SC-28, AU-12"
+  },
+  {
+    id: "T1552.005", name: "Unsecured Credentials", sub: "Cloud Instance Metadata",
+    tactic: "Credential Access", tacticKey: "credential_access",
+    severity: "medium", logsource: ["CloudTrail", "AzureActivity"],
+    sigma: "sigma/T1552_T1525_T1610_T1611_cloud.yml",
+    kql: "kql/all_detections.kql#T1552",
+    description: "Adversaries query cloud metadata services or secrets managers to harvest credentials, access keys, and other sensitive configuration.",
+    fps: ["Application secret rotation", "Authorized config retrieval"],
+    nist: "IA-5, SC-28, AC-6"
+  },
+  {
+    id: "T1525", name: "Implant Container Image", sub: "Malicious ECR/ACR Push",
+    tactic: "Persistence", tacticKey: "persistence",
+    severity: "medium", logsource: ["CloudTrail", "ContainerRegistry"],
+    sigma: "sigma/T1552_T1525_T1610_T1611_cloud.yml",
+    kql: "kql/all_detections.kql#T1525",
+    description: "Adversaries push malicious container images into cloud registries. The malicious image executes when pulled and deployed.",
+    fps: ["Developer direct pushes during testing"],
+    nist: "CM-7, SI-3, SI-4"
+  },
+  {
+    id: "T1610", name: "Deploy Container", sub: "Unexpected ECS/AKS Launch",
+    tactic: "Execution", tacticKey: "execution",
+    severity: "medium", logsource: ["CloudTrail", "AzureActivity"],
+    sigma: "sigma/T1552_T1525_T1610_T1611_cloud.yml",
+    kql: "kql/all_detections.kql#T1610",
+    description: "Adversaries deploy containers to execute malicious code in cloud environments, often using compromised credentials or registry access.",
+    fps: ["Authorized manual deployments"],
+    nist: "CM-7, SI-4, AU-12"
+  },
+  {
+    id: "T1611", name: "Escape to Host", sub: "Privileged Container",
+    tactic: "Privilege Escalation", tacticKey: "privilege_escalation",
+    severity: "high", logsource: ["KubePodInventory", "CloudTrail"],
+    sigma: "sigma/T1552_T1525_T1610_T1611_cloud.yml",
+    kql: "kql/all_detections.kql#T1611",
+    description: "Adversaries exploit privileged container configurations to break out to the underlying host and escalate privileges.",
+    fps: ["Legacy workloads requiring privileged mode"],
+    nist: "CM-7, SC-39, SI-4"
+  },
+  {
+    id: "T1535", name: "Unused Cloud Regions", sub: "Non-standard Region Activity",
+    tactic: "Defense Evasion", tacticKey: "defense_evasion",
+    severity: "high", logsource: ["CloudTrail", "AzureActivity"],
+    sigma: "sigma/T1535_T1048_cloud.yml",
+    kql: "kql/all_detections.kql#T1535",
+    description: "Adversaries create resources in cloud regions not used by the organization to evade monitoring and establish persistence without detection.",
+    fps: ["Approved DR in secondary regions", "New regional expansions"],
+    nist: "CM-8, AU-12, SI-4"
+  },
+  {
+    id: "T1048", name: "Exfiltration Over Alternative Protocol", sub: "DNS / HTTPS Tunneling",
+    tactic: "Exfiltration", tacticKey: "exfiltration",
+    severity: "medium", logsource: ["VPC Flow Logs", "NSG Flow Logs"],
+    sigma: "sigma/T1535_T1048_cloud.yml",
+    kql: "kql/all_detections.kql#T1048",
+    description: "Adversaries exfiltrate data using non-standard protocols such as DNS or high-volume HTTPS to avoid DLP controls.",
+    fps: ["High-volume DNS resolvers", "Legitimate CDN communications"],
+    nist: "SC-7, AU-12, SI-4"
+  },
+  {
+    id: "T1190", name: "Exploit Public-Facing Application", sub: "Cloud API / Web App",
+    tactic: "Initial Access", tacticKey: "initial_access",
+    severity: "high", logsource: ["WAF Logs", "CloudTrail"],
+    sigma: "sigma/T1078_valid_accounts_cloud.yml",
+    kql: "kql/all_detections.kql#T1190",
+    description: "Adversaries exploit vulnerabilities in internet-facing applications deployed on cloud infrastructure to gain initial access.",
+    fps: ["Legitimate penetration testing", "Security scanner activity"],
+    nist: "RA-5, SI-2, SI-10"
+  }
+];
+
+// Tactic color map
+const TACTIC_COLORS = {
+  "initial_access":       { color: "#f97316", bg: "rgba(249,115,22,0.12)",  border: "rgba(249,115,22,0.3)"  },
+  "execution":            { color: "#ef4444", bg: "rgba(239,68,68,0.12)",   border: "rgba(239,68,68,0.3)"   },
+  "persistence":          { color: "#a78bfa", bg: "rgba(167,139,250,0.12)", border: "rgba(167,139,250,0.3)" },
+  "privilege_escalation": { color: "#ec4899", bg: "rgba(236,72,153,0.12)",  border: "rgba(236,72,153,0.3)"  },
+  "defense_evasion":      { color: "#eab308", bg: "rgba(234,179,8,0.12)",   border: "rgba(234,179,8,0.3)"   },
+  "credential_access":    { color: "#f97316", bg: "rgba(249,115,22,0.12)",  border: "rgba(249,115,22,0.3)"  },
+  "discovery":            { color: "#3b82f6", bg: "rgba(59,130,246,0.12)",  border: "rgba(59,130,246,0.3)"  },
+  "collection":           { color: "#22c55e", bg: "rgba(34,197,94,0.12)",   border: "rgba(34,197,94,0.3)"   },
+  "exfiltration":         { color: "#f43f5e", bg: "rgba(244,63,94,0.12)",   border: "rgba(244,63,94,0.3)"   }
+};
+
+const SEV_ORDER = { critical: 0, high: 1, medium: 2, low: 3 };
+
+let activeFilter = 'all';
+let searchQuery  = '';
+let sortCol      = null;
+let sortDir      = 1;
+let expandedId   = null;
+
+// ── Build tactic filter buttons
+function buildFilters() {
+  const tactics = [...new Set(TECHNIQUES.map(t => t.tactic))].sort();
+  const container = document.getElementById('filters');
+  tactics.forEach(tactic => {
+    const btn = document.createElement('button');
+    btn.className = 'filter-btn';
+    btn.dataset.filter = tactic;
+    const key = TECHNIQUES.find(t => t.tactic === tactic).tacticKey;
+    const c = TACTIC_COLORS[key];
+    btn.textContent = tactic;
+    btn.style.setProperty('--tc', c.color);
+    btn.addEventListener('click', () => {
+      activeFilter = btn.dataset.filter;
+      document.querySelectorAll('.filter-btn').forEach(b => b.classList.toggle('active', b === btn));
+      renderTable();
+    });
+    container.appendChild(btn);
+  });
+  document.querySelector('[data-filter="all"]').addEventListener('click', () => {
+    activeFilter = 'all';
+    document.querySelectorAll('.filter-btn').forEach(b => b.classList.toggle('active', b.dataset.filter === 'all'));
+    renderTable();
+  });
+}
+
+// ── Build heatmap
+function buildHeatmap() {
+  const tacticCounts = {};
+  TECHNIQUES.forEach(t => {
+    tacticCounts[t.tactic] = (tacticCounts[t.tactic] || 0) + 1;
+  });
+  const max = Math.max(...Object.values(tacticCounts));
+  const container = document.getElementById('heatmap');
+  container.innerHTML = '';
+  Object.entries(tacticCounts).sort((a,b) => b[1]-a[1]).forEach(([tactic, count]) => {
+    const key = TECHNIQUES.find(t => t.tactic === tactic).tacticKey;
+    const c = TACTIC_COLORS[key] || { color: '#64748b', bg: 'transparent', border: '#334155' };
+    const pct = Math.round((count / max) * 100);
+    const cell = document.createElement('div');
+    cell.className = 'hm-cell';
+    cell.style.borderColor = c.border;
+    cell.innerHTML = `
+      <div class="hm-tactic" style="color:${c.color}">${tactic}</div>
+      <div class="hm-count">${count}</div>
+      <div class="hm-label">technique${count>1?'s':''}</div>
+      <div class="hm-bar"><div class="hm-fill" style="width:${pct}%;background:${c.color}"></div></div>
+    `;
+    cell.addEventListener('click', () => {
+      activeFilter = tactic;
+      document.querySelectorAll('.filter-btn').forEach(b =>
+        b.classList.toggle('active', b.dataset.filter === tactic)
+      );
+      renderTable();
+      document.getElementById('main-table').scrollIntoView({ behavior: 'smooth', block: 'start' });
+    });
+    container.appendChild(cell);
+  });
+}
+
+// ── Render table
+function renderTable() {
+  const q = searchQuery.toLowerCase();
+  let data = TECHNIQUES.filter(t => {
+    const matchFilter = activeFilter === 'all' || t.tactic === activeFilter;
+    const matchSearch = !q ||
+      t.id.toLowerCase().includes(q) ||
+      t.name.toLowerCase().includes(q) ||
+      t.tactic.toLowerCase().includes(q) ||
+      t.logsource.some(l => l.toLowerCase().includes(q));
+    return matchFilter && matchSearch;
+  });
+
+  if (sortCol) {
+    data = [...data].sort((a, b) => {
+      let av = a[sortCol], bv = b[sortCol];
+      if (sortCol === 'severity') { av = SEV_ORDER[av]; bv = SEV_ORDER[bv]; }
+      return (av < bv ? -1 : av > bv ? 1 : 0) * sortDir;
+    });
+  }
+
+  document.getElementById('results-count').textContent = `${data.length} result${data.length!==1?'s':''}`;
+
+  const tbody = document.getElementById('table-body');
+  tbody.innerHTML = '';
+
+  if (data.length === 0) {
+    tbody.innerHTML = `<tr><td colspan="7" style="text-align:center;padding:32px;color:var(--muted);font-family:var(--mono);font-size:12px">No techniques match your filter</td></tr>`;
+    return;
+  }
+
+  data.forEach((t, i) => {
+    const key = t.tacticKey;
+    const c = TACTIC_COLORS[key] || { color: '#64748b', bg: 'rgba(100,116,139,0.1)', border: '#334155' };
+    const isExp = expandedId === t.id;
+
+    const tr = document.createElement('tr');
+    tr.className = isExp ? 'expanded' : '';
+    tr.style.animationDelay = `${i * 0.03}s`;
+    tr.innerHTML = `
+      <td><span class="technique-id">${t.id}</span></td>
+      <td>
+        <div class="technique-name">${t.name}</div>
+        <div class="technique-sub">${t.sub}</div>
+      </td>
+      <td>
+        <span class="tactic-tag" style="color:${c.color};background:${c.bg};border:1px solid ${c.border}">${t.tactic}</span>
+      </td>
+      <td><span class="sev-badge sev-${t.severity}">${t.severity}</span></td>
+      <td>
+        <div class="log-sources">
+          ${t.logsource.map(l => `<span class="log-tag">${l}</span>`).join('')}
+        </div>
+      </td>
+      <td>
+        <div class="coverage-chips">
+          <span class="chip has-sigma">Sigma</span>
+          <span class="chip has-kql">KQL</span>
+        </div>
+      </td>
+      <td><span class="expand-icon">▶</span></td>
+    `;
+    tr.addEventListener('click', () => {
+      expandedId = isExp ? null : t.id;
+      renderTable();
+    });
+    tbody.appendChild(tr);
+
+    if (isExp) {
+      const dr = document.createElement('tr');
+      dr.className = 'detail-row';
+      dr.innerHTML = `
+        <td colspan="7">
+          <div class="detail-inner">
+            <div class="detail-section">
+              <h4>Description</h4>
+              <p>${t.description}</p>
+              <h4 style="margin-top:14px">NIST 800-53 Controls</h4>
+              <p style="font-family:var(--mono);font-size:12px;color:var(--accent)">${t.nist}</p>
+              <h4 style="margin-top:14px">Files</h4>
+              <div class="detail-links">
+                <a class="detail-link" href="${t.sigma}" target="_blank">📄 Sigma rule</a>
+                <a class="detail-link" href="${t.kql}" target="_blank">🔍 KQL query</a>
+                <a class="detail-link" href="https://attack.mitre.org/techniques/${t.id.replace('.','/')}/" target="_blank">🔗 ATT&CK</a>
+              </div>
+            </div>
+            <div class="detail-section">
+              <h4>False positives</h4>
+              <div class="fps">
+                ${t.fps.map(fp => `<div class="fp-item">${fp}</div>`).join('')}
+              </div>
+              <h4 style="margin-top:14px">Log sources</h4>
+              <div class="log-sources" style="margin-top:6px">
+                ${t.logsource.map(l => `<span class="log-tag">${l}</span>`).join('')}
+              </div>
+            </div>
+          </div>
+        </td>
+      `;
+      tbody.appendChild(dr);
+    }
+  });
+}
+
+// ── Sort
+document.querySelectorAll('th[data-col]').forEach(th => {
+  th.addEventListener('click', () => {
+    const col = th.dataset.col;
+    if (sortCol === col) sortDir *= -1;
+    else { sortCol = col; sortDir = 1; }
+    document.querySelectorAll('th').forEach(h => h.classList.remove('sorted'));
+    th.classList.add('sorted');
+    th.querySelector('.sort-arrow').textContent = sortDir === 1 ? '↑' : '↓';
+    renderTable();
+  });
+});
+
+// ── Search
+document.getElementById('search').addEventListener('input', e => {
+  searchQuery = e.target.value;
+  expandedId = null;
+  renderTable();
+});
+
+// ── Init
+buildFilters();
+buildHeatmap();
+renderTable();
+</script>
+</body>
+</html>

@@ -1,0 +1,34 @@
+title: Create Cloud Account - New IAM User or Service Principal
+id: b2c3d4e5-0003-4e5f-8a9b-cloud003
+status: experimental
+description: Detects the creation of new IAM users, service accounts, or service principals in cloud environments. Adversaries create accounts to maintain persistence or establish additional access vectors.
+references:
+  - https://attack.mitre.org/techniques/T1136/003/
+author: Odis Huff III
+date: 2026-01-01
+tags:
+  - attack.persistence
+  - attack.t1136
+  - attack.t1136.003
+logsource:
+  product: aws
+  service: cloudtrail
+detection:
+  selection_create_user:
+    eventSource: iam.amazonaws.com
+    eventName:
+      - CreateUser
+      - CreateServiceLinkedRole
+  selection_create_key:
+    eventSource: iam.amazonaws.com
+    eventName: CreateAccessKey
+  condition: selection_create_user or selection_create_key
+fields:
+  - userIdentity.userName
+  - requestParameters.userName
+  - requestParameters.roleName
+  - sourceIPAddress
+falsepositives:
+  - Legitimate onboarding of new developers
+  - Automated provisioning via IaC pipelines
+level: medium

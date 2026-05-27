@@ -1,0 +1,144 @@
+title: Unsecured Credentials - Secrets Manager Access from Lambda
+id: e5f6a7b8-0010-4e5f-8a9b-cloud010
+status: experimental
+description: Detects unusual access to AWS Secrets Manager or SSM Parameter Store from Lambda functions or EC2 instances in unexpected regions, potentially indicating secrets harvesting.
+references:
+  - https://attack.mitre.org/techniques/T1552/005/
+author: Odis Huff III
+date: 2026-01-01
+tags:
+  - attack.credential_access
+  - attack.t1552
+  - attack.t1552.005
+logsource:
+  product: aws
+  service: cloudtrail
+detection:
+  selection_secrets:
+    eventSource: secretsmanager.amazonaws.com
+    eventName:
+      - GetSecretValue
+      - BatchGetSecretValue
+  selection_ssm:
+    eventSource: ssm.amazonaws.com
+    eventName:
+      - GetParameter
+      - GetParameters
+      - GetParametersByPath
+  condition: selection_secrets or selection_ssm
+fields:
+  - userIdentity.arn
+  - requestParameters.secretId
+  - requestParameters.name
+  - sourceIPAddress
+falsepositives:
+  - Application secret rotation
+  - Authorized config retrieval
+level: medium
+---
+title: Implant Container Image - Malicious ECR Image Push
+id: e5f6a7b8-0011-4e5f-8a9b-cloud011
+status: experimental
+description: Detects pushes of new container images to ECR repositories, especially from unusual sources. Adversaries plant malicious images to achieve persistence or code execution.
+references:
+  - https://attack.mitre.org/techniques/T1525/
+author: Odis Huff III
+date: 2026-01-01
+tags:
+  - attack.persistence
+  - attack.t1525
+logsource:
+  product: aws
+  service: cloudtrail
+detection:
+  selection:
+    eventSource: ecr.amazonaws.com
+    eventName:
+      - PutImage
+      - InitiateLayerUpload
+      - CompleteLayerUpload
+  filter_cicd:
+    userIdentity.arn|contains:
+      - 'codebuild'
+      - 'codepipeline'
+      - 'github-actions'
+  condition: selection and not filter_cicd
+fields:
+  - userIdentity.arn
+  - requestParameters.repositoryName
+  - requestParameters.imageTag
+  - sourceIPAddress
+falsepositives:
+  - Developer direct pushes during testing
+level: medium
+---
+title: Deploy Container - Unexpected ECS Task or EKS Pod Launch
+id: e5f6a7b8-0012-4e5f-8a9b-cloud012
+status: experimental
+description: Detects deployment of new ECS tasks or EKS workloads outside normal CI/CD pipelines. Adversaries deploy containers to execute malicious code in cloud environments.
+references:
+  - https://attack.mitre.org/techniques/T1610/
+author: Odis Huff III
+date: 2026-01-01
+tags:
+  - attack.execution
+  - attack.t1610
+logsource:
+  product: aws
+  service: cloudtrail
+detection:
+  selection_ecs:
+    eventSource: ecs.amazonaws.com
+    eventName:
+      - RunTask
+      - CreateService
+      - UpdateService
+  selection_eks:
+    eventSource: eks.amazonaws.com
+    eventName:
+      - CreateNodegroup
+      - CreateFargateProfile
+  filter_known_roles:
+    userIdentity.arn|contains:
+      - 'deploy-role'
+      - 'pipeline'
+  condition: (selection_ecs or selection_eks) and not filter_known_roles
+fields:
+  - userIdentity.arn
+  - requestParameters.taskDefinition
+  - requestParameters.cluster
+  - sourceIPAddress
+falsepositives:
+  - Authorized manual deployments
+level: medium
+---
+title: Escape to Host - Container Privileged Mode Enabled
+id: e5f6a7b8-0013-4e5f-8a9b-cloud013
+status: experimental
+description: Detects creation of ECS task definitions or Lambda functions with privileged container settings or host network mode, which could allow container escape.
+references:
+  - https://attack.mitre.org/techniques/T1611/
+author: Odis Huff III
+date: 2026-01-01
+tags:
+  - attack.privilege_escalation
+  - attack.t1611
+logsource:
+  product: aws
+  service: cloudtrail
+detection:
+  selection:
+    eventSource: ecs.amazonaws.com
+    eventName: RegisterTaskDefinition
+  filter_privileged:
+    requestParameters.containerDefinitions|contains:
+      - '"privileged":true'
+      - '"networkMode":"host"'
+  condition: selection and filter_privileged
+fields:
+  - userIdentity.arn
+  - requestParameters.family
+  - sourceIPAddress
+falsepositives:
+  - Legacy workloads requiring privileged mode
+level: high

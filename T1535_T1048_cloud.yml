@@ -1,0 +1,68 @@
+title: Unused or Unsupported Cloud Regions - Resource Creation in Unexpected Region
+id: f6a7b8c9-0014-4e5f-8a9b-cloud014
+status: experimental
+description: Detects creation of cloud resources in regions not used by the organization. Adversaries use non-standard regions to evade monitoring and establish persistence.
+references:
+  - https://attack.mitre.org/techniques/T1535/
+author: Odis Huff III
+date: 2026-01-01
+tags:
+  - attack.defense_evasion
+  - attack.t1535
+logsource:
+  product: aws
+  service: cloudtrail
+detection:
+  selection:
+    eventName:
+      - RunInstances
+      - CreateFunction
+      - CreateCluster
+      - CreateBucket
+  filter_approved_regions:
+    awsRegion:
+      - us-east-1
+      - us-west-2
+      - eu-west-1
+  condition: selection and not filter_approved_regions
+fields:
+  - userIdentity.arn
+  - awsRegion
+  - eventName
+  - sourceIPAddress
+falsepositives:
+  - Approved disaster recovery in secondary regions
+  - New regional expansions
+level: high
+---
+title: Exfiltration Over Alternative Protocol - DNS or HTTPS Data Tunneling
+id: f6a7b8c9-0015-4e5f-8a9b-cloud015
+status: experimental
+description: Detects anomalous outbound DNS query volume or unusual HTTPS egress patterns from EC2 instances or Lambda functions, indicating potential data exfiltration via covert channels.
+references:
+  - https://attack.mitre.org/techniques/T1048/
+author: Odis Huff III
+date: 2026-01-01
+tags:
+  - attack.exfiltration
+  - attack.t1048
+logsource:
+  product: aws
+  service: vpc_flow_log
+detection:
+  selection_dns:
+    dstPort: 53
+    action: ACCEPT
+  selection_high_volume:
+    bytes|gt: 100000
+  timeframe: 5m
+  condition: selection_dns and selection_high_volume | count() by srcAddr > 1000
+fields:
+  - srcAddr
+  - dstAddr
+  - dstPort
+  - bytes
+falsepositives:
+  - High-volume DNS resolvers
+  - Legitimate CDN communications
+level: medium
