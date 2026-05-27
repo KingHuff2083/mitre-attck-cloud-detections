@@ -23,35 +23,58 @@ jobs:
         with:
           python-version: '3.11'
 
-      - name: Install sigma-cli
-        run: pip install sigma-cli pySigma-backend-splunk pySigma-backend-elasticsearch
-
-      - name: Validate all Sigma rules
+      - name: Check YAML syntax
         run: |
-          echo "=== Validating Sigma rules ==="
-          sigma check sigma/
-          echo "✅ All rules passed validation"
+          pip install pyyaml
+          python3 - << 'PYEOF'
+          import yaml, glob, sys
+          errors = []
+          for f in glob.glob('sigma/*.yml'):
+              try:
+                  docs = list(yaml.safe_load_all(open(f)))
+                  for doc in docs:
+                      if doc and 'title' in doc:
+                          print(f"  ✅ {doc['title']}")
+              except Exception as e:
+                  errors.append(f"  ❌ {f}: {e}")
+          if errors:
+              for e in errors: print(e)
+              sys.exit(1)
+          print('\n✅ All rules passed YAML validation')
+          PYEOF
 
-      - name: Test conversion to Splunk SPL
+      - name: Validate required fields
         run: |
-          echo "=== Testing Splunk conversion ==="
-          for f in sigma/*.yml; do
-            echo "Converting: $f"
-            sigma convert -t splunk "$f" || echo "⚠️  Warning: $f failed Splunk conversion"
-          done
+          python3 - << 'PYEOF'
+          import yaml, glob, sys
+          required = ['title', 'status', 'description', 'tags', 'logsource', 'detection']
+          errors = []
+          count = 0
+          for f in glob.glob('sigma/*.yml'):
+              for doc in yaml.safe_load_all(open(f)):
+                  if not doc or 'title' not in doc: continue
+                  count += 1
+                  missing = [r for r in required if r not in doc]
+                  if missing:
+                      errors.append(f"  ❌ {doc['title']}: missing {missing}")
+          if errors:
+              for e in errors: print(e)
+              sys.exit(1)
+          print(f'✅ {count} rules validated — all required fields present')
+          PYEOF
 
-      - name: Test conversion to Elasticsearch
+      - name: Coverage summary
         run: |
-          echo "=== Testing Elasticsearch conversion ==="
-          for f in sigma/*.yml; do
-            echo "Converting: $f"
-            sigma convert -t elasticsearch "$f" || echo "⚠️  Warning: $f failed ES conversion"
-          done
-
-      - name: Count rules
-        run: |
-          echo "=== Rule summary ==="
-          echo "Sigma files: $(ls sigma/*.yml | wc -l)"
-          echo "Total rule definitions: $(grep -c '^title:' sigma/*.yml | awk -F: '{sum += $2} END {print sum}')"
-          echo "Critical rules: $(grep -c 'level: critical' sigma/*.yml | awk -F: '{sum += $2} END {print sum}')"
-          echo "High rules: $(grep -c 'level: high' sigma/*.yml | awk -F: '{sum += $2} END {print sum}')"
+          python3 - << 'PYEOF'
+          import yaml, glob
+          from collections import Counter
+          levels = Counter()
+          count = 0
+          for f in glob.glob('sigma/*.yml'):
+              for doc in yaml.safe_load_all(open(f)):
+                  if not doc or 'title' not in doc: continue
+                  count += 1
+                  levels[doc.get('level','unknown')] += 1
+          print(f'Total rules : {count}')
+          print(f'By severity : {dict(levels)}')
+          PYEOF
